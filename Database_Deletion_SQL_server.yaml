@@ -1,0 +1,13 @@
+---
+- name: Delete SQL Server database
+  hosts: your_target_server
+  gather_facts: no
+
+  tasks:
+    - name: Ensure database is absent
+      community.general.mssql_db:
+        login_host: your_server_ip
+        login_user: your_db_user
+        login_password: your_db_password
+        db: your_db_name
+        state: absent

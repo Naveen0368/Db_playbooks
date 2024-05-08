@@ -1,0 +1,27 @@
+---
+- name: Delete Oracle Database
+  hosts: oracle_servers
+  become: true
+  vars:
+    oracle_user: "oracle"
+    oracle_home: "/u01/app/oracle/product/12.1.0/dbhome_1"
+    db_name: "your_db_name"
+    db_password: "your_db_password"
+
+  tasks:
+    - name: Set environment variables for Oracle user
+      lineinfile:
+        path: "/home/{{ oracle_user }}/.bash_profile"
+        line: "{{ item }}"
+      with_items:
+        - "export ORACLE_HOME={{ oracle_home }}"
+        - "export PATH=$PATH:$ORACLE_HOME/bin"
+
+    - name: Delete Oracle database
+      shell: |
+        sqlplus / as sysdba <<EOF
+        SHUTDOWN IMMEDIATE;
+        STARTUP MOUNT EXCLUSIVE;
+        DROP DATABASE;
+        EOF
+      become_user: "{{ oracle_user }}"

@@ -1,0 +1,47 @@
+---
+- name: Provision SQL Server Standalone Instance
+  hosts: sql_servers
+  become: true
+  vars:
+    sql_server_version: "2019"
+    sql_server_edition: "Developer"
+    sql_instance_name: "MSSQLSERVER"
+    sql_sa_password: "your_strong_password"
+    sql_database_name: "your_database_name"
+
+  tasks:
+    - name: Install SQL Server
+      win_feature:
+        name: "NET-Framework-45-Core"
+        state: present
+
+    - name: Install SQL Server
+      win_package:
+        path: "C:\\path_to_installer\\SQLServer2019-SSEI-Dev.exe"
+        arguments: >
+          /Q /IACCEPTSQLSERVERLICENSETERMS /ACTION=install /INSTANCENAME={{ sql_instance_name }}
+          /FEATURES=SQLEngine /SQLSVCACCOUNT="NT AUTHORITY\\SYSTEM"
+          /SQLSYSADMINACCOUNTS="BUILTIN\\ADMINISTRATORS"
+          /SAPWD="{{ sql_sa_password }}" /SQLTEMPDBDIR="C:\\SQLTempDB\\"
+          /SQLUSERDBDIR="C:\\SQLUserDB\\" /SQLUSERDBLOGDIR="C:\\SQLUserDBLog\\"
+          /SQLBACKUPDIR="C:\\SQLBackup\\"
+        state: present
+
+    - name: Create SQL Server Database
+      win_shell: |
+        $db_name = "{{ sql_database_name }}"
+        $query = "CREATE DATABASE [$db_name]"
+        Invoke-Sqlcmd -Query $query
+      args:
+        executable: powershell.exe
+
+    - name: Configure SQL Server Firewall Rule
+      win_firewall_rule:
+        name: "SQL Server"
+        enable: yes
+        state: present
+        localport: "1433"
+        action: allow
+        direction: In
+        protocol: TCP
+

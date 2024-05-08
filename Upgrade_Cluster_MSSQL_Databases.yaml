@@ -1,0 +1,53 @@
+---
+- name: Upgrade Cluster MSSQL Databases
+  hosts: mssql_cluster_nodes
+  become: true
+  vars:
+    mssql_upgrade_media_path: "C:\\path_to_upgrade_media"
+    mssql_cluster_name: "YourClusterName"
+    mssql_instance_name: "MSSQLSERVER"
+    mssql_upgrade_setup_exe: "setup.exe"
+    mssql_feature_upgrade: "SQLENGINE,REPLICATION,FULLTEXT"
+    mssql_pid: "your_product_key_or_evaluation"
+
+  tasks:
+    - name: Check current node of SQL Server cluster instance
+      win_shell: Get-ClusterGroup -Name "{{ mssql_instance_name }}" | Select -ExpandProperty OwnerNode
+      register: current_node
+      run_once: true
+
+    - name: Transfer upgrade media to current node
+      win_copy:
+        src: "{{ mssql_upgrade_media_path }}"
+        dest: "C:\\temp\\upgrade_media"
+      when: inventory_hostname == current_node.stdout
+
+    - name: Run SQL Server upgrade setup
+      win_command: >
+        "C:\\temp\\upgrade_media\\{{ mssql_upgrade_setup_exe }}"
+        /ACTION=upgrade /INSTANCENAME={{ mssql_instance_name }}
+        /FEATURES={{ mssql_feature_upgrade }} /IAcceptSQLServerLicenseTerms
+        /QUIET /NORESTART /UpdateEnabled /PID={{ mssql_pid }}
+      register: upgrade_result
+      when: inventory_hostname == current_node.stdout
+
+    - name: Validate upgrade
+      win_shell: |
+        Import-Module SQLPS
+        $instance = "{{ mssql_instance_name }}"
+        $version = Invoke-Sqlcmd -Query "SELECT @@VERSION" -ServerInstance $instance
+        Write-Output $version
+      register: version_output
+      failed_when: "'Version' not in version_output.stdout"
+      when: inventory_hostname == current_node.stdout
+
+    - name: Move SQL Server cluster instance to next node
+      win_shell: Move-ClusterGroup -Name "{{ mssql_instance_name }}" -Node (Get-ClusterNode -Cluster "{{ mssql_cluster_name }}" | Where-Object { $_.Name -ne $env:COMPUTERNAME } | Select-Object -First 1).Name
+      when: inventory_hostname == current_node.stdout
+      run_once: true
+
+    - name: Check upgrade result
+      fail:
+        msg: "The upgrade process failed"
+      when: upgrade_result.rc != 0 and inventory_hostname == current_node.stdout
+

@@ -1,0 +1,55 @@
+---
+- name: Patch Cluster MSSQL Databases
+  hosts: mssql_cluster
+  become: true
+  vars:
+    mssql_patch_download_url: "http://example.com/path/to/patch"
+    mssql_patch_file_name: "SQLServerPatch.exe"
+    mssql_service_name: "MSSQLSERVER"
+    mssql_cluster_group_name: "SQLServerClusterGroup"
+
+  tasks:
+    - name: Check cluster group owner
+      win_shell: Get-ClusterGroup -Name "{{ mssql_cluster_group_name }}"
+      register: cluster_group_owner
+      run_once: true
+
+    - name: Download the MSSQL patch
+      win_get_url:
+        url: "{{ mssql_patch_download_url }}"
+        dest: "C:\\temp\\{{ mssql_patch_file_name }}"
+        method: GET
+      when: inventory_hostname == cluster_group_owner.stdout_lines[0]
+
+    - name: Move cluster group to current node
+      win_shell: Move-ClusterGroup -Name "{{ mssql_cluster_group_name }}" -Node -Cluster $env:COMPUTERNAME
+      when: inventory_hostname == cluster_group_owner.stdout_lines[0]
+      run_once: true
+
+    - name: Stop MSSQL Service
+      win_service:
+        name: "{{ mssql_service_name }}"
+        state: stopped
+      when: inventory_hostname == cluster_group_owner.stdout_lines[0]
+
+    - name: Apply MSSQL patch
+      win_command: "C:\\temp\\{{ mssql_patch_file_name }} /quiet /norestart"
+      register: patch_result
+      when: inventory_hostname == cluster_group_owner.stdout_lines[0]
+
+    - name: Start MSSQL Service
+      win_service:
+        name: "{{ mssql_service_name }}"
+        state: started
+      when: inventory_hostname == cluster_group_owner.stdout_lines[0]
+
+    - name: Move cluster group back to original owner
+      win_shell: Move-ClusterGroup -Name "{{ mssql_cluster_group_name }}" -Node "{{ cluster_group_owner.stdout_lines[0] }}"
+      when: inventory_hostname == cluster_group_owner.stdout_lines[0]
+      run_once: true
+
+    - name: Check patch application result
+      fail:
+        msg: "The patch did not apply successfully"
+      when: patch_result.rc != 0 and inventory_hostname == cluster_group_owner.stdout_lines[0]
+

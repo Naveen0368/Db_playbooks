@@ -1,0 +1,71 @@
+---
+- name: Create Oracle Database
+  hosts: oracle_servers
+  become: true
+  vars:
+    oracle_user: "oracle"
+    oracle_home: "/u01/app/oracle/product/12.1.0/dbhome_1"
+    oracle_base: "/u01/app/oracle"
+    db_name: "your_db_name"
+    db_password: "your_db_password"
+    db_domain: "your_db_domain"
+    db_port: 1521
+    db_character_set: "AL32UTF8"
+    db_national_character_set: "UTF8"
+
+  tasks:
+    - name: Install Oracle prerequisites
+      yum:
+        name: "{{ item }}"
+        state: present
+      with_items:
+        - oracle-rdbms-server-12cR1-preinstall
+
+    - name: Create directories for Oracle installation
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ oracle_user }}"
+        group: "{{ oracle_user }}"
+      with_items:
+        - "{{ oracle_base }}"
+        - "{{ oracle_home }}"
+
+    - name: Set environment variables for Oracle user
+      lineinfile:
+        path: "/home/{{ oracle_user }}/.bash_profile"
+        line: "{{ item }}"
+      with_items:
+        - "export ORACLE_HOME={{ oracle_home }}"
+        - "export ORACLE_BASE={{ oracle_base }}"
+        - "export PATH=$PATH:$ORACLE_HOME/bin"
+
+    - name: Install Oracle software
+      unarchive:
+        src: "/path/to/oracle/software.zip"
+        dest: "{{ oracle_home }}"
+        remote_src: yes
+        owner: "{{ oracle_user }}"
+        group: "{{ oracle_user }}"
+
+    - name: Create a new Oracle database
+      shell: |
+        dbca -silent -createDatabase \
+          -templateName General_Purpose.dbc \
+          -gdbName {{ db_name }} \
+          -sid {{ db_name }} \
+          -responseFile NO_VALUE \
+          -characterSet {{ db_character_set }} \
+          -sysPassword {{ db_password }} \
+          -systemPassword {{ db_password }} \
+          -createAsContainerDatabase false \
+          -databaseType MULTIPURPOSE \
+          -automaticMemoryManagement false \
+          -totalMemory 2048 \
+          -storageType FS \
+          -datafileDestination "{{ oracle_base }}/oradata" \
+          -redoLogFileSize 50 \
+          -emConfiguration NONE \
+          -ignorePreReqs
+      become_user: "{{ oracle_user }}"
+

@@ -1,0 +1,14 @@
+---
+- name: Create a new SQL Server database
+  hosts: sql_server_host
+  gather_facts: no
+
+  tasks:
+    - name: Create a new database
+      community.general.mssql_db:
+        login_host: your_sql_server_ip
+        login_user: your_sql_server_user
+        login_password: your_sql_server_password
+        db: your_new_database_name
+        state: present
+

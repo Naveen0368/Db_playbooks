@@ -1,0 +1,35 @@
+---
+- name: Patch Standalone MSSQL Databases
+  hosts: mssql_servers
+  become: true
+  vars:
+    mssql_patch_download_url: "http://example.com/path/to/patch"
+    mssql_patch_file_name: "SQLServerPatch.exe"
+    mssql_service_name: "MSSQLSERVER"
+
+  tasks:
+    - name: Download the MSSQL patch
+      win_get_url:
+        url: "{{ mssql_patch_download_url }}"
+        dest: "C:\\temp\\{{ mssql_patch_file_name }}"
+        method: GET
+
+    - name: Stop MSSQL Service
+      win_service:
+        name: "{{ mssql_service_name }}"
+        state: stopped
+
+    - name: Apply MSSQL patch
+      win_command: "C:\\temp\\{{ mssql_patch_file_name }} /quiet /norestart"
+      register: patch_result
+
+    - name: Start MSSQL Service
+      win_service:
+        name: "{{ mssql_service_name }}"
+        state: started
+
+    - name: Check patch application result
+      fail:
+        msg: "The patch did not apply successfully"
+      when: patch_result.rc != 0
+
